@@ -1,4 +1,3 @@
- 
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -11,10 +10,28 @@ import adminRouter from "./routers/adminRouter.js";
 import connectCloudinary from "./config/cloudinary.js";
 import staffRouter from "./routers/staffRouter.js";
 
-// Database Connection
+let isConnected = false;
+
 const connectDB = async () => {
+  if (isConnected) {
+    console.log("Using existing mongoDB connection");
+    return;
+  }
+
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    const dbUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+
+    if (!dbUri) {
+      throw new Error(
+        "Database URI (MONGODB_URI/MONGO_URI) is missing in environment variables!",
+      );
+    }
+
+    await mongoose.connect(dbUri, {
+      bufferCommands: false,
+    });
+
+    isConnected = true;
     console.log("mongoDB connected Successfully");
   } catch (error) {
     console.log("Database connection error", error);
@@ -23,13 +40,21 @@ const connectDB = async () => {
 
 const app = express();
 connectCloudinary();
-connectDB();
 
-app.use(cors({
-  origin: "*", 
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
-}));app.use(express.json());
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
+
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  }),
+);
+
+app.use(express.json());
 
 app.use("/api/user", userRouter);
 app.use("/api/doctor", doctorRouter);
@@ -50,10 +75,10 @@ app.use((err, req, res, next) => {
   });
 });
 
- if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
     console.log(`server is running on port http://localhost:${PORT}`);
   });
 }
 
- export default app;
+export default app;
